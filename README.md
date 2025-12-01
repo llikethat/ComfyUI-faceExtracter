@@ -4,11 +4,25 @@ Automated face extraction with reference-based matching for DeepFaceLab de-aging
 
 ## Features
 
-- **Unified Face Extractor**: Single node works with any IMAGE input (video, image sequence, single image)
+- **Unified Face Extractor**: Single node with dual input modes
+- **GPU Accelerated**: Face detection and embedding on CUDA (falls back to CPU)
+- **Large Video Support**: Streaming mode processes videos of any length
+- **Memory Efficient**: Chunked processing with periodic GPU memory cleanup
 - **Reference-based matching**: Provide reference image(s), automatically extract matching faces
 - **Auto-incrementing output**: Each run creates a new numbered folder (no overwrites!)
 - **DFL-compatible output**: Generates aligned faces and masks ready for DeepFaceLab
-- **InsightFace backend**: High-accuracy face detection and recognition using ArcFace embeddings
+
+## GPU vs CPU Processing
+
+| Component | Device | Notes |
+|-----------|--------|-------|
+| InsightFace Detection | **GPU** | Uses ONNX Runtime + CUDA |
+| InsightFace Embedding | **GPU** | ArcFace model on CUDA |
+| Image I/O | CPU | OpenCV read/write |
+| Mask Generation | CPU | OpenCV operations |
+| Video Decoding | CPU | OpenCV VideoCapture |
+
+The node automatically detects CUDA availability and uses GPU when possible.
 
 ## Installation
 
@@ -57,20 +71,36 @@ Computes face embeddings from one or more reference images.
 
 ### DFL Face Extractor
 
-**Unified extractor - works with any IMAGE input!**
+**Unified extractor with two input modes for handling any video size!**
+
+#### Input Mode 1: IMAGE (for short clips)
+- Connect `VHS_LoadVideo`, `LoadImage`, or `LoadImageSequence`
+- All frames loaded to RAM first
+- Best for clips under ~1000 frames
+
+#### Input Mode 2: video_path (for large videos) ⭐ RECOMMENDED
+- Provide direct path to video file as STRING
+- **Streaming mode** - processes one frame at a time
+- Works with hours of footage
+- Minimal RAM usage
 
 | Input | Type | Description |
 |-------|------|-------------|
-| images | IMAGE | From VHS_LoadVideo, LoadImage, LoadImageSequence, etc. |
 | reference_embedding | FACE_EMBEDDING | From DFL Reference Embedding node |
+| images | IMAGE | (Optional) For short clips via VHS_LoadVideo |
+| **video_path** | STRING | **(Optional) Direct path to video file - USE FOR LARGE VIDEOS** |
 | similarity_threshold | float | Match threshold 0.3-0.95 (default: 0.6) |
 | margin_factor | float | Padding around face (default: 0.4) |
 | output_size | int | Output image size in pixels (default: 512) |
 | max_faces_per_frame | int | Max matching faces per frame (default: 1) |
+| **frame_skip** | int | Process every Nth frame (default: 1) |
+| **start_frame** | int | Start processing at this frame (default: 0) |
+| **end_frame** | int | Stop at this frame, -1 = all (default: -1) |
 | output_prefix | string | Folder name prefix (default: "dfl_extract") |
 | save_to_disk | bool | Save faces to disk (default: true) |
 | save_debug_info | bool | Save extraction log JSON (default: true) |
 | detection_backend | dropdown | "insightface" or "opencv_cascade" |
+| **clear_gpu_every_n_frames** | int | GPU memory cleanup interval (default: 500) |
 
 | Output | Type | Description |
 |--------|------|-------------|
@@ -191,6 +221,35 @@ ComfyUI/output/
 2. **Use multi-reference** for production extractions
 3. **Source dataset**: Need 10,000+ faces for good de-aging
 4. **Keep settings consistent** between source and destination (margin_factor, output_size)
+
+## Handling Large Videos
+
+For videos longer than a few minutes, **always use `video_path` input** instead of IMAGE input:
+
+```
+❌ VHS_LoadVideo (2-hour movie) → DFL Face Extractor
+   Problem: Loads ALL frames to RAM = crash!
+
+✅ DFL Face Extractor with video_path="/path/to/movie.mp4"
+   Solution: Streams one frame at a time = works!
+```
+
+### Memory Usage Comparison
+
+| Method | 10 min video (24fps) | 2 hour movie |
+|--------|---------------------|--------------|
+| IMAGE input | ~86 GB RAM | ~1 TB RAM ❌ |
+| video_path | ~500 MB RAM | ~500 MB RAM ✅ |
+
+### Recommended Settings for Long Videos
+
+```
+video_path: /path/to/movie.mp4
+frame_skip: 2-5 (faster extraction, still get thousands of faces)
+clear_gpu_every_n_frames: 500 (prevents GPU memory buildup)
+start_frame: 0 (or specific scene start)
+end_frame: -1 (all frames, or specific scene end)
+```
 
 ## License
 
