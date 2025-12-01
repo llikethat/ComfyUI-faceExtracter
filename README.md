@@ -25,8 +25,8 @@ Automated face extraction for DeepFaceLab de-aging and face swap workflows.
 
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/your-repo/comfyui_dfl_extractor.git
-cd comfyui_dfl_extractor
+git clone https://github.com/llikethat/ComfyUI-faceExtractor.git
+cd ComfyUI-faceExtractor
 pip install -r requirements.txt
 ```
 
